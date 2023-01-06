@@ -31,7 +31,7 @@ https://github.com/arksine/moonraker
 
   `sudo pip3 install multitimer`
 
-  `git clone https://github.com/bustedlogic/DWIN_T5UIC1_LCD.git`
+  `git clone https://github.com/SuperPi911/DWIN_T5UIC1_LCD.git`
 
 
 ### Wire the display 
