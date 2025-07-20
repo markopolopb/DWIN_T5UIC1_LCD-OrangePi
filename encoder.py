@@ -1,7 +1,7 @@
 # Class to monitor a rotary encoder and update a value.  You can either read the value when you need it, by calling getValue(), or
 # you can configure a callback which will be called whenever the value changes.
 
-import RPi.GPIO as GPIO
+import wiringpi
 
 class Encoder:
 
@@ -12,14 +12,17 @@ class Encoder:
         self.state = '00'
         self.direction = None
         self.callback = callback
-        GPIO.setup(self.leftPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.setup(self.rightPin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(self.leftPin, GPIO.BOTH, callback=self.transitionOccurred)  
-        GPIO.add_event_detect(self.rightPin, GPIO.BOTH, callback=self.transitionOccurred)  
+
+        wiringpi.pinMode(self.leftPin, wiringpi.GPIO.INPUT)
+        wiringpi.pullUpDnControl(self.leftPin, wiringpi.GPIO.PUD_UP)
+        wiringpi.pinMode(self.rightPin, wiringpi.GPIO.INPUT)
+        wiringpi.pullUpDnControl(self.rightPin, wiringpi.GPIO.PUD_UP)
+        wiringpi.wiringPiISR(leftPin, wiringpi.GPIO.INT_EDGE_BOTH, self.transitionOccurred)
+        wiringpi.wiringPiISR(self.rightPin, wiringpi.GPIO.INT_EDGE_BOTH, self.transitionOccurred)
 
     def transitionOccurred(self, channel):
-        p1 = GPIO.input(self.leftPin)
-        p2 = GPIO.input(self.rightPin)
+        p1 = wiringpi.digitalRead(self.leftPin)
+        p2 = wiringpi.digitalRead(self.rightPin)
         newState = "{}{}".format(p1, p2)
 
         if self.state == "00": # Resting position
