@@ -13,14 +13,15 @@ class Encoder:
         self.direction = None
         self.callback = callback
 
+        wiringpi.wiringPiSetup()
         wiringpi.pinMode(self.leftPin, wiringpi.GPIO.INPUT)
         wiringpi.pullUpDnControl(self.leftPin, wiringpi.GPIO.PUD_UP)
         wiringpi.pinMode(self.rightPin, wiringpi.GPIO.INPUT)
         wiringpi.pullUpDnControl(self.rightPin, wiringpi.GPIO.PUD_UP)
-        wiringpi.wiringPiISR(leftPin, wiringpi.GPIO.INT_EDGE_BOTH, self.transitionOccurred)
-        wiringpi.wiringPiISR(self.rightPin, wiringpi.GPIO.INT_EDGE_BOTH, self.transitionOccurred)
+        wiringpi.wiringPiISR(leftPin, wiringpi.GPIO.INT_EDGE_BOTH, lambda: self.transitionOccurred())
+        wiringpi.wiringPiISR(self.rightPin, wiringpi.GPIO.INT_EDGE_BOTH, lambda: self.transitionOccurred())
 
-    def transitionOccurred(self, channel):
+    def transitionOccurred(self):
         p1 = wiringpi.digitalRead(self.leftPin)
         p2 = wiringpi.digitalRead(self.rightPin)
         newState = "{}{}".format(p1, p2)
@@ -38,7 +39,7 @@ class Encoder:
                 if self.direction == "L":
                     self.value = self.value - 1
                     if self.callback is not None:
-                        self.callback(self.value)
+                        self.callback()
 
         elif self.state == "10": # R3 or L1
             if newState == "11": # Turned left 1
@@ -47,7 +48,7 @@ class Encoder:
                 if self.direction == "R":
                     self.value = self.value + 1
                     if self.callback is not None:
-                        self.callback(self.value)
+                        self.callback()
 
         else: # self.state == "11"
             if newState == "01": # Turned left 1
@@ -58,11 +59,11 @@ class Encoder:
                 if self.direction == "L":
                     self.value = self.value - 1
                     if self.callback is not None:
-                        self.callback(self.value)
+                        self.callback()
                 elif self.direction == "R":
                     self.value = self.value + 1
                     if self.callback is not None:
-                        self.callback(self.value)
+                        self.callback()
                 
         self.state = newState
 

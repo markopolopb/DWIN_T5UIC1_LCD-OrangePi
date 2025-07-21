@@ -306,11 +306,11 @@ class DWIN_LCD:
 		self.encoder = Encoder(encoder_pins[0], encoder_pins[1])
 		self.button_pin = button_pin
 
-		wiringpi.wiringPiSetupGpio()
+		wiringpi.wiringPiSetup()
 		wiringpi.pinMode(self.button_pin, wiringpi.GPIO.INPUT)
 		wiringpi.pullUpDnControl(self.button_pin, wiringpi.GPIO.PUD_UP)
-		wiringpi.wiringPiISR(self.button_pin, wiringpi.GPIO.INT_EDGE_BOTH, self.encoder_has_data)
-		self.shutdown = True
+		wiringpi.wiringPiISR(self.button_pin, wiringpi.GPIO.INT_EDGE_BOTH, lambda: self.encoder_has_data())
+		self.shutdown = False
 
 		self.encoder.callback = self.encoder_has_data
 		self.EncodeLast = 0
@@ -2252,7 +2252,7 @@ class DWIN_LCD:
 			self.Draw_Status_Area(update)
 		self.lcd.UpdateLCD()
 
-	def encoder_has_data(self, val):
+	def encoder_has_data(self):
 		if self.shutdown:
 			return
 
