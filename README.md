@@ -25,7 +25,7 @@ Tested on an OrangePi zero 2w with the official OrangePi Ubuntu Jammy image.
 
 ### Library requirements
 
-   The [wiringOP-Python library](https://github.com/orangepi-xunlong/wiringOP). Install according to instructions in your boards' user manual.
+   The [wiringOP-Python library](https://github.com/orangepi-xunlong/wiringOP). Install according to instructions in your boards' user manual or the instructions in the repository.
 
   `sudo apt-get install python3-pip python3-serial git`
 
@@ -89,7 +89,7 @@ DWINLCD = DWIN_LCD(
 )
 ```
 
-If your control wheel is reversed (Voxelab Aquila) use this instead.
+If your control wheel is reversed (Voxelab Aquila) use this instead (or swap A and B cables).
 ```python
 #!/usr/bin/env python3
 from dwinlcd import DWIN_LCD
@@ -107,7 +107,7 @@ DWINLCD = DWIN_LCD(
 )
 ```
 
-Run with `python3 ./run.py`
+Run with `sudo python3 ./run.py`
 
 # Run at boot:
 
