@@ -68,7 +68,8 @@ I tried to take some images to help out with this: You don't have to use the col
 ### Run The Code
 
 Enter the downloaded DWIN_T5UIC1_LCD folder.
-Make new file run.py and copy/paste in the following (pick one)
+Make new file run.py and copy/paste in the following (pick one).
+Use /dev/ttyS5 for UART5, /dev/ttyS3 for UART3 etc.
 
 For an Ender3v2
 ```python
