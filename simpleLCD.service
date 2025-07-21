@@ -5,7 +5,7 @@
  [Service]
  Type=idle
  ExecStartPre=/bin/sleep 30
- ExecStart=/bin/sh -c '/usr/bin/env python3 /home/orangepi/DWIN_T5UIC1_LCD_OPI/run.py  > /tmp/lcd.log 2>&1'
+ ExecStart=/bin/sh -c '/usr/bin/env python3 /home/orangepi/DWIN_T5UIC1_LCD-OrangePi/run.py  > /tmp/lcd.log 2>&1'
  Restart=always
 
  [Install]

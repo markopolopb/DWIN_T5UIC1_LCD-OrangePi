@@ -16,7 +16,7 @@ Tested on an OrangePi zero 2w with the official OrangePi Ubuntu Jammy image.
 ### Enable serial communication
   First, you have to enable an additional UART for communicating with the screen. I used UART5.
 
-  * Start raspi-config: `sudo orangepi-config`.
+  * Start orangepi-config: `sudo orangepi-config`.
   * Select `System`.
   * Select `Hardware`.
   * Enable `ph-uart5`.
@@ -31,7 +31,7 @@ Tested on an OrangePi zero 2w with the official OrangePi Ubuntu Jammy image.
 
   `sudo pip3 install multitimer requests`
 
-  `git clone https://github.com/JMSPI/DWIN_T5UIC1_LCD.git`
+  `git clone https://github.com/JMSPI/DWIN_T5UIC1_LCD-OrangePi.git`
 
 ### Wire the display 
 
