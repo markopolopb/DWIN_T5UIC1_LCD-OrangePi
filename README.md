@@ -1,5 +1,79 @@
-# DWIN_T5UIC1_LCD_OPI
+# DWIN T5UIC1 LCD on Orange Pi Zero 3
 
+This repository is a modified fork of `JMSPI/DWIN_T5UIC1_LCD-OrangePi`, specifically adapted to be fully compatible with the **Orange Pi Zero 3** running Klipper. The original code relied on hardware libraries and an architecture that were incompatible with the Allwinner H616 SoC.
+
+The code in this repository has been extensively reworked to provide stable functionality.
+
+## Installation
+
+These instructions assume you are running a Debian-based OS like Armbian.
+
+1.  **Install System Dependencies:**
+    First, install `git` and the necessary Python tools (`pip`, `python-serial`).
+    ```bash
+    sudo apt-get update
+    sudo apt-get install python3-pip python3-serial git
+    ```
+
+2.  **Install Python Libraries:**
+    Install the required Python packages using `pip`.
+    ```bash
+    sudo pip3 install multitimer requests
+    ```
+
+3.  **Install the Correct `OPi.GPIO` Library:**
+    The standard `OPi.GPIO` library does not support the Orange Pi Zero 3. You must install a specific fork that includes the correct pin mappings for the H616 chip.
+    ```bash
+    sudo pip3 install git+[https://github.com/PicoPlanetDev/OPi.GPIO.git](https://github.com/PicoPlanetDev/OPi.GPIO.git)
+    ```
+
+4.  **Clone This Repository:**
+    Clone this repository to your device.
+    ```bash
+    git clone <YOUR_REPOSITORY_URL>
+    # Example: git clone [https://github.com/your-username/your-repo-name.git](https://github.com/your-username/your-repo-name.git)
+    cd <YOUR_REPOSITORY_DIRECTORY>
+    ```
+
+5.  **Run the Script:**
+    The main script must be run with `sudo` to access the GPIO hardware.
+    ```bash
+    sudo python3 ./run.py
+    ```
+
+---
+## Summary of Code Modifications
+
+The original codebase was incompatible with the Orange Pi Zero 3's GPIO architecture. The following key technical changes were implemented to achieve full functionality.
+
+1.  **GPIO Library Migration:**
+    * All dependencies on the incompatible `wiringpi` library and the custom `encoder.py` class were completely removed.
+    * The entire GPIO handling logic was migrated to the **`OPi.GPIO`** library, which is designed for Orange Pi boards.
+
+2.  **Input Logic Overhaul:**
+    * The original event-driven model, which relied on hardware interrupts (`wiringPiISR`), was replaced with a multi-threaded software **polling model**.
+    * Two dedicated background threads were created in `dwinlcd.py`:
+        1.  A **hardware polling thread (`_poll_inputs`)** continuously reads the GPIO pin states, decodes the rotary encoder signal, and detects button presses.
+        2.  A **UI loop thread (`_ui_loop`)** constantly checks for events detected by the hardware thread and calls the appropriate UI rendering functions.
+
+3.  **Pin Mapping Correction:**
+    * It was determined that the Orange Pi Zero 3 uses two separate GPIO controllers, and its header pins correspond to high kernel GPIO numbers (e.g., >200).
+    * An **"identity map"** mechanism was implemented in `run.py`. This uses the `CUSTOM` mode of the `OPi.GPIO` library to force it to use raw, correct kernel GPIO numbers, bypassing the library's flawed internal translation.
+
+4.  **Encoder Sensitivity Adjustment:**
+    * A configurable class attribute, `ENCODER_SENSITIVITY`, was added to the `DWIN_LCD` class.
+    * The input logic was modified to require multiple physical encoder "clicks" to trigger a single UI action, resolving issues with over-sensitivity.
+
+5.  **Robust Shutdown Implementation:**
+    * The `run.py` script was improved to handle `Ctrl+C` (`KeyboardInterrupt`) signals gracefully.
+    * The shutdown sequence now ensures that all background threads are stopped before GPIO resources are cleaned up, preventing race condition errors on exit.
+
+---
+### Collaboration Note
+### The code in this repository was prepared and modified in collaboration with the AI assistant, **Gemini**.
+---
+
+# Original README:
 ## Python class for the Ender 3 V2 LCD runing klipper3d with Moonraker compatible with OrangePi
 
 https://www.klipper3d.org
