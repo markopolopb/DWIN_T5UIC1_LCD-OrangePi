@@ -6,10 +6,53 @@ The code in this repository has been extensively reworked to provide stable func
 
 ## Installation
 
-These instructions assume you are running a Debian-based OS like Armbian.
+These instructions assume you are running a Debian-based OS like Armbian. My OS:
+
+```console
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+VERSION_CODENAME=bookworm
+```
+
+### Hardware Setup
+
+1.  **Enable UART Communication:**
+    First, enable an additional UART for communicating with the screen. UART5 is recommended.
+
+    - Start orangepi-config: `sudo orangepi-config`
+    - Select `System`
+    - Select `Hardware`
+    - Enable `ph-uart5`
+    - Save and Exit
+
+2.  **Wire the Display:**
+    Connect the display to your Orange Pi Zero 3 using the following pin mapping:
+
+    | Display Pin | Orange Pi Zero 3 GPIO | Function  |
+    | ----------- | --------------------- | --------- |
+    | Rx          | PH2 (Pin 8)           | UART5 TX  |
+    | Tx          | PH3 (Pin 10)          | UART5 RX  |
+    | Ent         | PI0 (Pin 26)          | Button    |
+    | A           | PI15 (Pin 22)         | Encoder A |
+    | B           | PI12 (Pin 18)         | Encoder B |
+    | Vcc         | 5V (Pin 2 or 4)       | Power     |
+    | Gnd         | GND (Pin 6, 9, etc.)  | Ground    |
+
+    **Pro-tip:** Connect 5V and GND to the original cable, and tape off the 5V pin on the USB cable to the printer. This way your screen will turn off when you turn off the printer.
+
+    **Wiring Reference Images:**
+
+    <img src="images/panel.png?raw=true" width="325" height="180">
+
+    <img src="images/wire1.png?raw=true" width="200" height="400">
+
+### Software Installation
 
 1.  **Install System Dependencies:**
     First, install `git` and the necessary Python tools (`pip`, `python-serial`).
+
     ```bash
     sudo apt-get update
     sudo apt-get install python3-pip python3-serial git
@@ -17,215 +60,156 @@ These instructions assume you are running a Debian-based OS like Armbian.
 
 2.  **Install Python Libraries:**
     Install the required Python packages using `pip`.
+
     ```bash
     sudo pip3 install multitimer requests
     ```
 
 3.  **Install the Correct `OPi.GPIO` Library:**
     The standard `OPi.GPIO` library does not support the Orange Pi Zero 3. You must install a specific fork that includes the correct pin mappings for the H616 chip.
+
     ```bash
-    sudo pip3 install git+[https://github.com/PicoPlanetDev/OPi.GPIO.git](https://github.com/PicoPlanetDev/OPi.GPIO.git)
+    sudo pip3 install git+https://github.com/PicoPlanetDev/OPi.GPIO.git
     ```
 
 4.  **Clone This Repository:**
     Clone this repository to your device.
+
     ```bash
     git clone <YOUR_REPOSITORY_URL>
-    # Example: git clone [https://github.com/your-username/your-repo-name.git](https://github.com/your-username/your-repo-name.git)
+    # Example: git clone https://github.com/your-username/your-repo-name.git
     cd <YOUR_REPOSITORY_DIRECTORY>
     ```
 
-5.  **Run the Script:**
+5.  **Configure the Example Script:**
+    This repository includes a pre-configured `run.py` example that implements the Orange Pi Zero 3-specific GPIO handling. The script uses **raw kernel GPIO numbers** and an identity mapping system to work around OPi.GPIO library limitations.
+
+    **Key differences from the original:**
+
+    - Uses actual kernel GPIO numbers (e.g., 79, 78, 72) instead of wiringPi pin numbers
+    - Implements GPIO identity mapping for H616 compatibility
+    - Includes proper shutdown handling with thread cleanup
+    - Pre-configured for recommended pin layout
+
+    **To use the example:**
+
+    1. Edit the `API_Key` in `run.py` to match your Moonraker configuration
+    2. Optionally adjust pin assignments if you used different physical pins
+    3. The default configuration uses:
+       - Physical pin 19 → Encoder A (GPIO 79)
+       - Physical pin 18 → Encoder B (GPIO 78)
+       - Physical pin 15 → Button (GPIO 72)
+       - UART5 (`/dev/ttyS5`) for display communication
+
+    **For custom configurations:**
+    If you need to modify pin assignments, update the GPIO numbers in `run.py`:
+
+    ```python
+    # Example: Different pin assignment
+    ENCODER_PIN_A = 79  # Your chosen kernel GPIO number
+    ENCODER_PIN_B = 78  # Your chosen kernel GPIO number
+    BUTTON_PIN = 72     # Your chosen kernel GPIO number
+    ```
+
+    **For reversed encoder (Voxelab Aquila):**
+    Simply swap the encoder pin assignments in the script:
+
+    ```python
+    encoder_Pins = (ENCODER_PIN_B, ENCODER_PIN_A)  # Swapped order
+    ```
+
+6.  **Run the Script:**
     The main script must be run with `sudo` to access the GPIO hardware.
     ```bash
     sudo python3 ./run.py
     ```
 
+### Run at Boot (Optional)
+
+To automatically start the LCD interface at boot:
+
+```bash
+sudo chmod +x run.py
+sudo chmod +x simpleLCD.service
+sudo mv simpleLCD.service /lib/systemd/system/simpleLCD.service
+sudo chmod 644 /lib/systemd/system/simpleLCD.service
+sudo systemctl daemon-reload
+sudo systemctl enable simpleLCD.service
+sudo reboot
+```
+
+**Note:** The service includes a 30-second delay after boot to allow web services to settle. The expected path for `run.py` is `/home/orangepi/DWIN_T5UIC1_LCD/run.py`.
+
 ---
+
 ## Summary of Code Modifications
 
 The original codebase was incompatible with the Orange Pi Zero 3's GPIO architecture. The following key technical changes were implemented to achieve full functionality.
 
 1.  **GPIO Library Migration:**
-    * All dependencies on the incompatible `wiringpi` library and the custom `encoder.py` class were completely removed.
-    * The entire GPIO handling logic was migrated to the **`OPi.GPIO`** library, which is designed for Orange Pi boards.
+
+    - All dependencies on the incompatible `wiringpi` library and the custom `encoder.py` class were completely removed.
+    - The entire GPIO handling logic was migrated to the **`OPi.GPIO`** library, which is designed for Orange Pi boards.
 
 2.  **Input Logic Overhaul:**
-    * The original event-driven model, which relied on hardware interrupts (`wiringPiISR`), was replaced with a multi-threaded software **polling model**.
-    * Two dedicated background threads were created in `dwinlcd.py`:
-        1.  A **hardware polling thread (`_poll_inputs`)** continuously reads the GPIO pin states, decodes the rotary encoder signal, and detects button presses.
-        2.  A **UI loop thread (`_ui_loop`)** constantly checks for events detected by the hardware thread and calls the appropriate UI rendering functions.
+
+    - The original event-driven model, which relied on hardware interrupts (`wiringPiISR`), was replaced with a multi-threaded software **polling model**.
+    - Two dedicated background threads were created in `dwinlcd.py`:
+      1.  A **hardware polling thread (`_poll_inputs`)** continuously reads the GPIO pin states, decodes the rotary encoder signal, and detects button presses.
+      2.  A **UI loop thread (`_ui_loop`)** constantly checks for events detected by the hardware thread and calls the appropriate UI rendering functions.
 
 3.  **Pin Mapping Correction:**
-    * It was determined that the Orange Pi Zero 3 uses two separate GPIO controllers, and its header pins correspond to high kernel GPIO numbers (e.g., >200).
-    * An **"identity map"** mechanism was implemented in `run.py`. This uses the `CUSTOM` mode of the `OPi.GPIO` library to force it to use raw, correct kernel GPIO numbers, bypassing the library's flawed internal translation.
+    - It was determined that the Orange Pi Zero 3 uses two separate GPIO controllers, and its header pins correspond to high kernel GPIO numbers (e.g., >200).
+    - An **"identity map"** mechanism was implemented in `run.py`. This uses the `CUSTOM` mode of the `OPi.GPIO` library to force it to use raw, correct kernel GPIO numbers, bypassing the library's flawed internal translation.
+
+<img src="images/gpioreadall.png?raw=true" width="700" height="386">
 
 4.  **Encoder Sensitivity Adjustment:**
-    * A configurable class attribute, `ENCODER_SENSITIVITY`, was added to the `DWIN_LCD` class.
-    * The input logic was modified to require multiple physical encoder "clicks" to trigger a single UI action, resolving issues with over-sensitivity.
+    - A configurable class attribute, `ENCODER_SENSITIVITY`, was added to the `DWIN_LCD` class.
+    - The input logic was modified to require multiple physical encoder "clicks" to trigger a single UI action, resolving issues with over-sensitivity.
+
+## Current Status
+
+### Working Features:
+
+**Print Menu:**
+
+- List / Print jobs from Moonraker
+- Auto switching to Print Menu on job start/end
+- Display print time, progress, temperatures, and job name
+- Pause / Resume / Cancel job
+- Tune Menu: Print speed & temperatures
+
+**Prepare Menu:**
+
+- Move / Jog toolhead
+- Disable steppers
+- Auto Home
+- Z offset (PROBE_CALIBRATE)
+- Preheat
+- Cooldown
+
+**Info Menu:**
+
+- Shows printer information
+
+### Known Limitations:
+
+- Save/Loading preheat settings (hardcoded on start, changes don't persist on restart)
+- The Control: Motion Menu
 
 ---
-### Collaboration Note
-### The code in this repository was prepared and modified in collaboration with the AI assistant, **Gemini**.
----
 
-# Original README:
-## Python class for the Ender 3 V2 LCD runing klipper3d with Moonraker compatible with OrangePi
+## Credits and Acknowledgments
 
-https://www.klipper3d.org
+This project builds upon the excellent work of several open-source projects and contributors:
 
-https://octoprint.org/
+- **Original Project:** [JMSPI/DWIN_T5UIC1_LCD-OrangePi](https://github.com/JMSPI/DWIN_T5UIC1_LCD-OrangePi) - The good fork for this Orange Pi Zero 3 adaptation
+- **Klipper 3D Printer Firmware:** [klipper3d.org](https://www.klipper3d.org) - Advanced 3D printer firmware
+- **Moonraker API:** [github.com/arksine/moonraker](https://github.com/arksine/moonraker) - Web API server for Klipper
+- **OctoPrint:** [octoprint.org](https://octoprint.org/) - Web interface for 3D printers
+- **OPi.GPIO Library (H616 Fork):** [github.com/PicoPlanetDev/OPi.GPIO](https://github.com/PicoPlanetDev/OPi.GPIO) - Essential GPIO library with Orange Pi Zero 3 support
 
-https://github.com/arksine/moonraker
+### Development Note
 
-
-## Setup:
-
-Tested on an OrangePi zero 2w with the official OrangePi Ubuntu Jammy image.
-
-### Enable serial communication
-  First, you have to enable an additional UART for communicating with the screen. I used UART5.
-
-  * Start orangepi-config: `sudo orangepi-config`.
-  * Select `System`.
-  * Select `Hardware`.
-  * Enable `ph-uart5`.
-  * Save and Exit.
-  
-
-### Library requirements
-
-   The [wiringOP-Python library](https://github.com/orangepi-xunlong/wiringOP). Install according to instructions in your boards' user manual or the instructions in the repository.
-
-  `sudo apt-get install python3-pip python3-serial git`
-
-  `sudo pip3 install multitimer requests`
-
-  `git clone https://github.com/JMSPI/DWIN_T5UIC1_LCD-OrangePi.git`
-
-### Wire the display 
-
-Might differ depending on which UART you selected and which opi you have. The wiringPi library uses wPi pin numbers. You can find those using `gpio readall`.
-
-  * Display <-> OrangePi GPIO
-  * Rx  =   wPi 5 / PH2  (UART5 TX)
-  * Tx  =   wPi 7 / PH3 (UART5 RX)
-  * Ent =   wPi 19 / PI0
-  * A   =   wPi 20 / PI15
-  * B   =   wPi 22 / PI12
-  * Vcc =   5v
-  * Gnd =   GND
-
-Pro-tip: Connect 5v and GND to the original cable, and tape off the 5v pin on the usb cable to the printer. This way your screen will turn off if you turn off the printer.
-
-I tried to take some images to help out with this: You don't have to use the color of wiring that I used:
-
-  * Rx  =   Purple
-  * Tx  =   Blue
-  * Ent =   Orange
-  * A   =   Yellow
-  * B   =   White
-  * Vcc =   Red
-  * Gnd =   Green
-
-<img src ="images/panel.png?raw=true" width="325" height="180">
-
-<img src ="images/wire1.png?raw=true" width="200" height="400"> 
-
-<img src ="images/opi2w pinout.png?raw=true" width="512" height="337">
-
-
-### Run The Code
-
-Enter the downloaded DWIN_T5UIC1_LCD folder.
-Make new file run.py and copy/paste in the following (pick one).
-Use /dev/ttyS5 for UART5, /dev/ttyS3 for UART3 etc.
-
-For an Ender3v2
-```python
-#!/usr/bin/env python3
-from dwinlcd import DWIN_LCD
-
-encoder_Pins = (22, 20)
-button_Pin = 19
-LCD_COM_Port = '/dev/ttyS5'
-API_Key = 'XXXXXX'
-
-DWINLCD = DWIN_LCD(
-	LCD_COM_Port,
-	encoder_Pins,
-	button_Pin,
-	API_Key
-)
-```
-
-If your control wheel is reversed (Voxelab Aquila) use this instead (or swap A and B cables).
-```python
-#!/usr/bin/env python3
-from dwinlcd import DWIN_LCD
-
-encoder_Pins = (20, 22)
-button_Pin = 19
-LCD_COM_Port = '/dev/ttyS5'
-API_Key = 'XXXXXX'
-
-DWINLCD = DWIN_LCD(
-	LCD_COM_Port,
-	encoder_Pins,
-	button_Pin,
-	API_Key
-)
-```
-
-Run with `sudo python3 ./run.py`
-
-# Run at boot:
-
-	Note: Delay of 30s after boot to allow webservices to settal.
-	
-	path of `run.py` is expected to be `/home/orangepi/DWIN_T5UIC1_LCD/run.py`
-
-   `sudo chmod +x run.py`
-   
-   `sudo chmod +x simpleLCD.service`
-   
-   `sudo mv simpleLCD.service /lib/systemd/system/simpleLCD.service`
-   
-   `sudo chmod 644 /lib/systemd/system/simpleLCD.service`
-   
-   `sudo systemctl daemon-reload`
-   
-   `sudo systemctl enable simpleLCD.service`
-   
-   `sudo reboot`
-   
-   
-
-# Status:
-
-## Working:
-
- Print Menu:
- 
-    * List / Print jobs from OctoPrint / Moonraker
-    * Auto swiching from to Print Menu on job start / end.
-    * Display Print time, Progress, Temps, and Job name.
-    * Pause / Resume / Cancle Job
-    * Tune Menu: Print speed & Temps
-
- Perpare Menu:
- 
-    * Move / Jog toolhead
-    * Disable stepper
-    * Auto Home
-    * Z offset (PROBE_CALIBRATE)
-    * Preheat
-    * cooldown
- 
- Info Menu
- 
-    * Shows printer info.
-
-## Notworking:
-    * Save / Loding Preheat setting, hardcode on start can be changed in menu but will not retane on restart.
-    * The Control: Motion Menu
+The code modifications in this repository were developed in collaboration with AI assistance (**Gemini** and **Kiro**) to solve the specific compatibility challenges with the Orange Pi Zero 3's H616 SoC architecture.
