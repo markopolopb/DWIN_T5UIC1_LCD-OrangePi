@@ -64,10 +64,6 @@ The original codebase was incompatible with the Orange Pi Zero 3's GPIO architec
     * A configurable class attribute, `ENCODER_SENSITIVITY`, was added to the `DWIN_LCD` class.
     * The input logic was modified to require multiple physical encoder "clicks" to trigger a single UI action, resolving issues with over-sensitivity.
 
-5.  **Robust Shutdown Implementation:**
-    * The `run.py` script was improved to handle `Ctrl+C` (`KeyboardInterrupt`) signals gracefully.
-    * The shutdown sequence now ensures that all background threads are stopped before GPIO resources are cleaned up, preventing race condition errors on exit.
-
 ---
 ### Collaboration Note
 ### The code in this repository was prepared and modified in collaboration with the AI assistant, **Gemini**.
