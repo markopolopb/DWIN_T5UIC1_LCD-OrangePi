@@ -1,0 +1,17 @@
+{
+  "PLA": {
+    "nozzle": 170,
+    "bed": 60,
+    "fan": 255
+  },
+  "ABS": {
+    "nozzle": 240,
+    "bed": 80,
+    "fan": 0
+  },
+  "PETG": {
+    "nozzle": 170,
+    "bed": 70,
+    "fan": 128
+  }
+}

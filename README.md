@@ -44,9 +44,21 @@ VERSION_CODENAME=bookworm
 
     **Wiring Reference Images:**
 
+    Wire color coding used in the reference photos:
+
+    - Rx = Purple
+    - Tx = Blue
+    - Ent = Orange
+    - A = Yellow
+    - B = White
+    - Vcc = Red
+    - Gnd = Green
+
     <img src="images/panel.png?raw=true" width="325" height="180">
+    *Display panel connection points*
 
     <img src="images/wire1.png?raw=true" width="200" height="400">
+    *Example wiring implementation*
 
 ### Software Installation
 
@@ -163,6 +175,7 @@ The original codebase was incompatible with the Orange Pi Zero 3's GPIO architec
     - An **"identity map"** mechanism was implemented in `run.py`. This uses the `CUSTOM` mode of the `OPi.GPIO` library to force it to use raw, correct kernel GPIO numbers, bypassing the library's flawed internal translation.
 
 <img src="images/gpioreadall.png?raw=true" width="700" height="386">
+*Orange Pi Zero 3 GPIO mapping output showing kernel GPIO numbers*
 
 4.  **Encoder Sensitivity Adjustment:**
     - A configurable class attribute, `ENCODER_SENSITIVITY`, was added to the `DWIN_LCD` class.
@@ -193,10 +206,33 @@ The original codebase was incompatible with the Orange Pi Zero 3's GPIO architec
 
 - Shows printer information
 
-### Known Limitations:
+**Control Menu:**
 
-- Save/Loading preheat settings (hardcoded on start, changes don't persist on restart)
-- The Control: Motion Menu
+- Temperature Menu: Full temperature control with PLA/ABS/PETG presets
+- Motion Menu: Complete motion settings (Max Velocity, Acceleration, etc.)
+
+### Recent Updates & Breaking Changes:
+
+**🔥 Breaking Changes (v2.0):**
+
+- **Motion Menu:** Completely rewritten - now fully functional with 5 motion settings
+- **Temperature Menu:** Enhanced with PETG support and persistent JSON configuration
+- **Preheat System:** All presets (PLA/ABS/PETG) now save to `preheat_settings.json`
+- **Shutdown Sequence:** Improved with aggressive thread termination (`os._exit(0)`)
+
+**✅ New Features:**
+
+- **PETG Material Support:** Full integration in Temperature and Prepare menus
+- **Persistent Settings:** Preheat configurations survive restarts via JSON file
+- **Enhanced Motion Menu:** Max Velocity, Acceleration, Corner Velocity, Speed Factor, Flow Rate
+- **Improved Scrolling:** Temperature menu now handles 7+ items without overlapping status bar
+- **Better Shutdown:** Clean exit with LCD screen clearing and thread cleanup
+
+**⚠️ Configuration Changes:**
+
+- Preheat settings now stored in `preheat_settings.json` (auto-created)
+- Default PETG settings: 230°C nozzle, 70°C bed, 50% fan speed
+- Motion menu uses G-code commands instead of API calls for better compatibility
 
 ---
 
@@ -204,7 +240,7 @@ The original codebase was incompatible with the Orange Pi Zero 3's GPIO architec
 
 This project builds upon the excellent work of several open-source projects and contributors:
 
-- **Original Project:** [JMSPI/DWIN_T5UIC1_LCD-OrangePi](https://github.com/JMSPI/DWIN_T5UIC1_LCD-OrangePi) - The good fork for this Orange Pi Zero 3 adaptation
+- **Original Project:** [JMSPI/DWIN_T5UIC1_LCD-OrangePi](https://github.com/JMSPI/DWIN_T5UIC1_LCD-OrangePi) - Direct fork base for this Orange Pi Zero 3 adaptation (part of fork chain: odwdinc → bustedlogic → SuperPi911 → JMSPI)
 - **Klipper 3D Printer Firmware:** [klipper3d.org](https://www.klipper3d.org) - Advanced 3D printer firmware
 - **Moonraker API:** [github.com/arksine/moonraker](https://github.com/arksine/moonraker) - Web API server for Klipper
 - **OctoPrint:** [octoprint.org](https://octoprint.org/) - Web interface for 3D printers

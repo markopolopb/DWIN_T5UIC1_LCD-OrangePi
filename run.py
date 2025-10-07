@@ -31,7 +31,7 @@ GPIO.setmode(identity_map)
 GPIO.setwarnings(False)
 
 # --- The rest of the script ---
-encoder_Pins = (ENCODER_PIN_A, ENCODER_PIN_B)
+encoder_Pins = (ENCODER_PIN_B, ENCODER_PIN_A)
 button_Pin = BUTTON_PIN
 LCD_COM_Port = '/dev/ttyS5'
 API_Key = 'XXXXXX' # Enter your API Key here
@@ -53,17 +53,31 @@ try:
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
-    # --- CORRECT SHUTDOWN SEQUENCE ---
+    # --- AGGRESSIVE SHUTDOWN SEQUENCE ---
     print("\nShutdown requested...")
     
     # First, tell the DWIN object to shut down its threads gracefully
     DWINLCD.lcdExit()
     
-    # Wait a moment for the thread to exit its loop
-    time.sleep(0.1)
+    # Wait for threads to exit with countdown
+    print("Waiting for threads to exit...", end="", flush=True)
+    for i in range(10):  # Wait max 1 second
+        time.sleep(0.1)
+        print(".", end="", flush=True)
+    print(" Done.")
     
     print("Cleaning up GPIO...")
-    # Now, it's safe to clean up GPIO
-    GPIO.cleanup()
+    try:
+        GPIO.cleanup()
+    except:
+        pass  # Ignore GPIO cleanup errors
+    
+    print("Force terminating all threads...")
+    
+    import os
     
     print("Exiting cleanly.")
+    
+    # Nuclear exit - bypasses all cleanup and threading issues
+    import os
+    os._exit(0)

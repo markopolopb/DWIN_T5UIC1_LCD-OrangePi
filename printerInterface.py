@@ -242,7 +242,8 @@ class PrinterData:
 
 	material_preset = [
 		material_preset_t('PLA', 200, 60),
-		material_preset_t('ABS', 210, 100)
+		material_preset_t('ABS', 240, 80),
+		material_preset_t('PETG', 230, 70)
 	]
 	files = None
 	MACHINE_SIZE = "220x220x250"
@@ -496,10 +497,32 @@ class PrinterData:
 		pass
 
 	def preheat(self, profile):
+		# Load settings from JSON config (preferred) or fallback to material_preset
+		try:
+			import json
+			import os
+			config_file = 'preheat_settings.json'
+			if os.path.exists(config_file):
+				with open(config_file, 'r') as f:
+					settings = json.load(f)
+				if profile in settings:
+					material = settings[profile]
+					self.preHeat(material['bed'], material['nozzle'])
+					self.sendGCode(f'M106 S{material["fan"]}')
+					return
+		except Exception as e:
+			print(f"Error loading {profile} preheat settings from JSON: {e}")
+		
+		# Fallback to material_preset
 		if profile == "PLA":
 			self.preHeat(self.material_preset[0].bed_temp, self.material_preset[0].hotend_temp)
+			self.sendGCode('M106 S255')  # PLA needs full fan
 		elif profile == "ABS":
 			self.preHeat(self.material_preset[1].bed_temp, self.material_preset[1].hotend_temp)
+			self.sendGCode('M106 S0')    # ABS needs no fan
+		elif profile == "PETG":
+			self.preHeat(self.material_preset[2].bed_temp, self.material_preset[2].hotend_temp)
+			self.sendGCode('M106 S128')  # PETG needs moderate fan
 
 	def save_settings(self):
 		print('saving settings')
@@ -520,3 +543,5 @@ class PrinterData:
 
 	def setZOffset(self, offset):
 		self.sendGCode('SET_GCODE_OFFSET Z=%s MOVE=1' % offset)
+
+
