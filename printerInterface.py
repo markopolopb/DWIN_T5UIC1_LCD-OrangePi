@@ -83,8 +83,96 @@ class HMI_Flag_t:
 
 
 class buzz_t:
-	def tone(self, t, n):
-		pass
+	def __init__(self, printer_interface):
+		self.printer = printer_interface
+		self.buzzer_method = 'console'  # Default fallback
+		self.buzzer_available = False
+		print("🔊 Buzzer initialized - will auto-detect method on first use")
+	
+	def _detect_buzzer_method(self):
+		"""Auto-detect available buzzer method in Klipper"""
+		if hasattr(self, '_detection_done'):
+			return
+		
+		self._detection_done = True
+		
+		# Method 1: Try BEEP macro
+		try:
+			self.printer.sendGCode('BEEP FREQUENCY=1000 DURATION=0.01')
+			self.buzzer_method = 'macro'
+			self.buzzer_available = True
+			print("🔊 Buzzer: Using BEEP macro")
+			return
+		except Exception as e:
+			pass
+		
+		# Method 2: Try SET_PIN buzzer
+		try:
+			self.printer.sendGCode('SET_PIN PIN=buzzer VALUE=0')
+			self.buzzer_method = 'pin'
+			self.buzzer_available = True
+			print("🔊 Buzzer: Using SET_PIN method")
+			return
+		except Exception as e:
+			pass
+		
+		# Fallback - console only
+		self.buzzer_method = 'console'
+		self.buzzer_available = False
+		print("🔊 Buzzer: No hardware buzzer detected, using console output")
+	
+	def tone(self, duration_ms, frequency_hz):
+		"""
+		Play a tone using Klipper-compatible commands
+		Args:
+			duration_ms: Duration in milliseconds
+			frequency_hz: Frequency in Hz (0 = silence)
+		"""
+		if frequency_hz <= 0:
+			# For silence, just wait
+			import time
+			time.sleep(duration_ms / 1000.0)
+			return
+		
+		# Auto-detect method on first use
+		self._detect_buzzer_method()
+		
+		try:
+			if self.buzzer_method == 'macro':
+				# Use BEEP macro
+				self.printer.sendGCode(f'BEEP FREQUENCY={frequency_hz} DURATION={duration_ms/1000.0}')
+			elif self.buzzer_method == 'pin':
+				# Use SET_PIN method
+				self.printer.sendGCode('SET_PIN PIN=buzzer VALUE=1')
+				import time
+				time.sleep(duration_ms / 1000.0)
+				self.printer.sendGCode('SET_PIN PIN=buzzer VALUE=0')
+			else:
+				# Console fallback
+				print(f"🔊 BEEP: {frequency_hz}Hz for {duration_ms}ms")
+		except Exception as e:
+			# If method fails, fall back to console
+			print(f"🔊 BEEP: {frequency_hz}Hz for {duration_ms}ms (hardware failed: {e})")
+	
+	def beep_success(self):
+		"""Play success sound (double beep)"""
+		self.tone(100, 659)  # High tone
+		self.tone(10, 0)     # Short pause
+		self.tone(100, 698)  # Higher tone
+	
+	def beep_error(self):
+		"""Play error sound (low tone)"""
+		self.tone(200, 440)  # Low tone
+	
+	def beep_click(self):
+		"""Play click sound (short beep)"""
+		self.tone(50, 800)   # Short high tone
+	
+	def beep_warning(self):
+		"""Play warning sound (triple beep)"""
+		for _ in range(3):
+			self.tone(100, 523)  # C note
+			self.tone(50, 0)     # Pause
 
 
 class material_preset_t:
@@ -222,8 +310,6 @@ class PrinterData:
 	Z_PROBE_OFFSET_RANGE_MIN = -20
 	Z_PROBE_OFFSET_RANGE_MAX = 20
 
-	buzzer = buzz_t()
-
 	BABY_Z_VAR = 0
 	feedrate_percentage = 100
 	temphot = 0
@@ -253,6 +339,8 @@ class PrinterData:
 	def __init__(self, API_Key, URL='127.0.0.1'):
 		self.op = MoonrakerSocket(URL, 80, API_Key)
 		self.status = None
+		# Initialize buzzer with reference to this printer interface
+		self.buzzer = buzz_t(self)
 		print(self.op.base_address)
 		self.ks = KlippySocket('/home/orangepi/printer_data/comms/klippy.sock', callback=self.klippy_callback)
 		subscribe = {
@@ -338,13 +426,19 @@ class PrinterData:
 	# ------------- OctoPrint Function ----------
 
 	def getREST(self, path):
-		r = self.op.s.get(self.op.base_address + path)
-		d = r.content.decode('utf-8')
 		try:
-			return json.loads(d)
-		except JSONDecodeError:
-			print('Decoding JSON has failed')
-		return None
+			r = self.op.s.get(self.op.base_address + path)
+			r.raise_for_status()  # Raise exception for HTTP errors
+			d = r.content.decode('utf-8')
+			try:
+				return json.loads(d)
+			except JSONDecodeError:
+				print(f'Decoding JSON has failed for path: {path}')
+				print(f'Response content: {d[:200]}...')  # Show first 200 chars
+				return None
+		except Exception as e:
+			print(f'HTTP request failed for {path}: {e}')
+			return None
 
 	async def _postREST(self, path, json):
 		self.op.s.post(self.op.base_address + path, json=json)
@@ -366,11 +460,28 @@ class PrinterData:
 		#alternative approach
 		#full_version = self.getREST('/printer/info')['result']['software_version']
 		#self.SHORT_BUILD_VERSION = '-'.join(full_version.split('-',2)[:2])
-		self.SHORT_BUILD_VERSION = self.getREST('/machine/update/status?refresh=false')['result']['version_info']['klipper']['version']
+		try:
+			version_response = self.getREST('/machine/update/status?refresh=false')
+			if version_response and 'result' in version_response:
+				self.SHORT_BUILD_VERSION = version_response['result']['version_info']['klipper']['version']
+			else:
+				self.SHORT_BUILD_VERSION = "Unknown"
+		except Exception as e:
+			print(f"Error getting Klipper version: {e}")
+			self.SHORT_BUILD_VERSION = "Unknown"
 
-		data = self.getREST('/printer/objects/query?toolhead')['result']['status']
-		toolhead = data['toolhead']
-		volume = toolhead['axis_maximum'] #[x,y,z,w]
+		try:
+			toolhead_response = self.getREST('/printer/objects/query?toolhead')
+			if toolhead_response and 'result' in toolhead_response and 'status' in toolhead_response['result']:
+				data = toolhead_response['result']['status']
+				toolhead = data.get('toolhead', {})
+				volume = toolhead.get('axis_maximum', [200, 200, 200, 100])  # Default values
+			else:
+				print("Warning: Could not get toolhead info, using defaults")
+				volume = [200, 200, 200, 100]  # Default values
+		except Exception as e:
+			print(f"Error getting toolhead info: {e}")
+			volume = [200, 200, 200, 100]  # Default values
 		self.MACHINE_SIZE = "{}x{}x{}".format(
 			int(volume[0]),
 			int(volume[1]),
@@ -381,7 +492,16 @@ class PrinterData:
 
 	def GetFiles(self, refresh=False):
 		if not self.files or refresh:
-			self.files = self.getREST('/server/files/list')["result"]
+			try:
+				files_response = self.getREST('/server/files/list')
+				if files_response and "result" in files_response:
+					self.files = files_response["result"]
+				else:
+					print("Warning: Could not get file list")
+					self.files = []
+			except Exception as e:
+				print(f"Error getting file list: {e}")
+				self.files = []
 		names = []
 		for fl in self.files:
 			names.append(fl["path"])
@@ -389,41 +509,84 @@ class PrinterData:
 
 	def update_variable(self):
 		query = '/printer/objects/query?extruder&heater_bed&gcode_move&fan'
-		data = self.getREST(query)['result']['status']
-		gcm = data['gcode_move']
-		z_offset = gcm['homing_origin'][2] #z offset
-		flow_rate = gcm['extrude_factor'] * 100 #flow rate percent
-		self.absolute_moves = gcm['absolute_coordinates'] #absolute or relative
-		self.absolute_extrude = gcm['absolute_extrude'] #absolute or relative
-		speed = gcm['speed'] #current speed in mm/s
-		print_speed = gcm['speed_factor'] * 100 #print speed percent
-		bed = data['heater_bed'] #temperature, target
-		extruder = data['extruder'] #temperature, target
-		fan = data['fan']
+		try:
+			response = self.getREST(query)
+			if response is None:
+				print("Warning: getREST returned None")
+				return
+			
+			if 'result' not in response:
+				print(f"Warning: No 'result' key in response: {response}")
+				return
+			
+			if 'status' not in response['result']:
+				print(f"Warning: No 'status' key in result: {response['result']}")
+				return
+				
+			data = response['result']['status']
+		except Exception as e:
+			print(f"Error in update_variable: {e}")
+			return
+		# Safely extract data with error checking
+		try:
+			gcm = data.get('gcode_move', {})
+			z_offset = gcm.get('homing_origin', [0, 0, 0])[2] if len(gcm.get('homing_origin', [])) > 2 else 0
+			flow_rate = gcm.get('extrude_factor', 1.0) * 100
+			self.absolute_moves = gcm.get('absolute_coordinates', True)
+			self.absolute_extrude = gcm.get('absolute_extrude', True)
+			speed = gcm.get('speed', 0)
+			print_speed = gcm.get('speed_factor', 1.0) * 100
+			bed = data.get('heater_bed', {})
+			extruder = data.get('extruder', {})
+			fan = data.get('fan', {})
+		except Exception as e:
+			print(f"Error extracting data from API response: {e}")
+			return
 		Update = False
 		try:
-			if self.thermalManager['temp_bed']['celsius'] != int(bed['temperature']):
-				self.thermalManager['temp_bed']['celsius'] = int(bed['temperature'])
+			# Update bed temperature
+			bed_temp = int(bed.get('temperature', 0))
+			bed_target = int(bed.get('target', 0))
+			if self.thermalManager['temp_bed']['celsius'] != bed_temp:
+				self.thermalManager['temp_bed']['celsius'] = bed_temp
 				Update = True
-			if self.thermalManager['temp_bed']['target'] != int(bed['target']):
-				self.thermalManager['temp_bed']['target'] = int(bed['target'])
+			if self.thermalManager['temp_bed']['target'] != bed_target:
+				self.thermalManager['temp_bed']['target'] = bed_target
 				Update = True
-			if self.thermalManager['temp_hotend'][0]['celsius'] != int(extruder['temperature']):
-				self.thermalManager['temp_hotend'][0]['celsius'] = int(extruder['temperature'])
+			
+			# Update extruder temperature
+			ext_temp = int(extruder.get('temperature', 0))
+			ext_target = int(extruder.get('target', 0))
+			if self.thermalManager['temp_hotend'][0]['celsius'] != ext_temp:
+				self.thermalManager['temp_hotend'][0]['celsius'] = ext_temp
 				Update = True
-			if self.thermalManager['temp_hotend'][0]['target'] != int(extruder['target']):
-				self.thermalManager['temp_hotend'][0]['target'] = int(extruder['target'])
+			if self.thermalManager['temp_hotend'][0]['target'] != ext_target:
+				self.thermalManager['temp_hotend'][0]['target'] = ext_target
 				Update = True
-			if self.thermalManager['fan_speed'][0] != int(fan['speed'] * 100):
-				self.thermalManager['fan_speed'][0] = int(fan['speed'] * 100)
+			
+			# Update fan speed
+			fan_speed = int(fan.get('speed', 0) * 100)
+			if self.thermalManager['fan_speed'][0] != fan_speed:
+				self.thermalManager['fan_speed'][0] = fan_speed
 				Update = True
 			if self.BABY_Z_VAR != z_offset:
 				self.BABY_Z_VAR = z_offset
 				self.HMI_ValueStruct.offset_value = z_offset * 100
 				Update = True
-		except:
-			pass #missing key, shouldn't happen, fixes misses on conditionals ¯\_(ツ)_/¯
-		self.job_Info = self.getREST('/printer/objects/query?virtual_sdcard&print_stats')['result']['status']
+		except Exception as e:
+			print(f"Error updating thermal manager: {e}")
+		
+		# Get job info with error handling
+		try:
+			job_response = self.getREST('/printer/objects/query?virtual_sdcard&print_stats')
+			if job_response and 'result' in job_response and 'status' in job_response['result']:
+				self.job_Info = job_response['result']['status']
+			else:
+				print("Warning: Could not get job info from API")
+				return
+		except Exception as e:
+			print(f"Error getting job info: {e}")
+			return
 		if self.job_Info:
 			self.file_name = self.job_Info['print_stats']['filename']
 			self.status = self.job_Info['print_stats']['state']

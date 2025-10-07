@@ -358,6 +358,8 @@ class DWIN_LCD:
 						event = self.ENCODER_DIFF_NO
 					else:
 						self.EncodeEnter = current_milli_time() + self.ENCODER_WAIT_ENTER
+						# Play click sound for button press
+						self.pd.buzzer.beep_click()
 				self.pending_event = self.ENCODER_DIFF_NO
 		return event
 
@@ -909,6 +911,10 @@ class DWIN_LCD:
 		self.HMI_SetLanguageCache()
 
 	def HMI_ShowBoot(self, mesg=None):
+		# Clear screen and show logo
+		self.lcd.Frame_Clear(self.lcd.Color_Bg_Black)
+		self.lcd.ICON_Show(self.ICON, self.ICON_LOGO, 71, 52)  # Show logo at center
+		
 		if mesg:
 			self.lcd.Draw_String(
 				False, False, self.lcd.DWIN_FONT_STAT,
@@ -916,6 +922,8 @@ class DWIN_LCD:
 				10, 50,
 				mesg
 			)
+		
+		# Animated loading bar
 		for t in range(0, 100, 2):
 			self.lcd.ICON_Show(self.ICON, self.ICON_Bar, 15, 260)
 			self.lcd.Draw_Rectangle(1, self.lcd.Color_Bg_Black, 15 + t * 242 / 100, 260, 257, 280)
@@ -1465,6 +1473,7 @@ class DWIN_LCD:
 				if self.pd.PREVENT_COLD_EXTRUSION:
 					if (self.pd.thermalManager['temp_hotend'][0]['celsius'] < self.pd.EXTRUDE_MINTEMP):
 						self.pd.HMI_flag.ETempTooLow_flag = True
+						self.pd.buzzer.beep_warning()  # Warning sound for low temperature
 						self.Popup_Window_ETempTooLow()
 						self.lcd.UpdateLCD()
 						return
@@ -3394,9 +3403,8 @@ class DWIN_LCD:
 			self.HMI_StepXYZE()
 
 	def HMI_AudioFeedback(self, success=True):
-		if (success):
-			self.pd.buzzer.tone(100, 659)
-			self.pd.buzzer.tone(10, 0)
-			self.pd.buzzer.tone(100, 698)
+		"""Play audio feedback based on operation result"""
+		if success:
+			self.pd.buzzer.beep_success()
 		else:
-			self.pd.buzzer.tone(40, 440)
+			self.pd.buzzer.beep_error()

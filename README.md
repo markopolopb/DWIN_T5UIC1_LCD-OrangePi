@@ -152,6 +152,58 @@ sudo reboot
 
 **Note:** The service includes a 30-second delay after boot to allow web services to settle. The expected path for `run.py` is `/home/orangepi/DWIN_T5UIC1_LCD/run.py`.
 
+### Buzzer Configuration (Optional)
+
+To enable audio feedback, add buzzer configuration to your Klipper `printer.cfg`:
+
+1. **Copy the buzzer configuration:**
+
+   ```bash
+   cp klipper_buzzer_macro.cfg ~/printer_data/config/
+   ```
+
+2. **Include in printer.cfg:**
+
+   ```ini
+   [include klipper_buzzer_macro.cfg]
+   ```
+
+3. **Update buzzer pin:**
+   Edit the pin number in `klipper_buzzer_macro.cfg` to match your hardware:
+
+   ```ini
+   # Ender 3 V2 (Creality 4.2.x boards)
+   [output_pin buzzer]
+   pin: PC6  # Most common for Ender 3 V2
+
+   # Other common pins:
+   # pin: PB0  # Older Creality boards
+   # pin: PC9  # SKR Mini E3 boards
+   ```
+
+4. **Find your buzzer pin:**
+   First, check if you already have a buzzer configured:
+
+   ```bash
+   grep -i buzzer ~/printer_data/config/printer.cfg
+   ```
+
+   If not found, consult these common pins:
+
+   | Printer Board            | Buzzer Pin | Notes                 |
+   | ------------------------ | ---------- | --------------------- |
+   | Ender 3 V2 (4.2.2/4.2.7) | `PC6`      | Most common           |
+   | Creality 1.1.x           | `PB0`      | Older boards          |
+   | SKR Mini E3 V2/V3        | `PC9`      | Popular upgrade       |
+   | RAMPS 1.4                | `ar37`     | If using Arduino pins |
+
+5. **Test the buzzer:**
+   ```gcode
+   TEST_BUZZER
+   ```
+
+**Note:** If no buzzer is configured, the system will fall back to console logging without affecting functionality.
+
 ---
 
 ## Summary of Code Modifications
@@ -227,12 +279,77 @@ The original codebase was incompatible with the Orange Pi Zero 3's GPIO architec
 - **Enhanced Motion Menu:** Max Velocity, Acceleration, Corner Velocity, Speed Factor, Flow Rate
 - **Improved Scrolling:** Temperature menu now handles 7+ items without overlapping status bar
 - **Better Shutdown:** Clean exit with LCD screen clearing and thread cleanup
+- **Audio Feedback:** Full buzzer support with Klipper BEEP macro
+  - Click sounds for menu navigation
+  - Success/error tones for operations
+  - Warning sounds for temperature alerts
+- **Improved Error Handling:** Robust API error handling prevents crashes
+  - Graceful handling of Moonraker API failures
+  - Detailed error logging for troubleshooting
+  - Automatic fallbacks for missing data
+- **Fixed Boot Screen:** Restored logo display during startup
+  - Proper logo positioning and loading animation
+  - Resolved duplicate function definitions
+  - Clean startup sequence with visual feedback
 
 **⚠️ Configuration Changes:**
 
 - Preheat settings now stored in `preheat_settings.json` (auto-created)
 - Default PETG settings: 230°C nozzle, 70°C bed, 50% fan speed
 - Motion menu uses G-code commands instead of API calls for better compatibility
+
+### Audio System Implementation
+
+The buzzer system auto-detects available Klipper buzzer methods:
+
+**Method 1: BEEP Macro (Recommended)**
+
+```gcode
+BEEP FREQUENCY=1000 DURATION=0.1
+```
+
+**Method 2: SET_PIN Direct Control**
+
+```gcode
+SET_PIN PIN=buzzer VALUE=1
+G4 P100  # Wait 100ms
+SET_PIN PIN=buzzer VALUE=0
+```
+
+**Method 3: Console Fallback**
+If no hardware buzzer is detected, sounds are logged to console.
+
+**Klipper Configuration Required:**
+Add to your `printer.cfg`:
+
+```ini
+[output_pin buzzer]
+pin: !ar37  # Change to your buzzer pin
+pwm: True
+shutdown_value: 0
+value: 0
+cycle_time: 0.001
+
+[gcode_macro BEEP]
+gcode:
+    {% set frequency = params.FREQUENCY|default(1000)|int %}
+    {% set duration = params.DURATION|default(0.1)|float %}
+    {% set pwm_value = (frequency / 2000.0)|float %}
+    {% if pwm_value > 1.0 %}{% set pwm_value = 1.0 %}{% endif %}
+    SET_PIN PIN=buzzer VALUE={pwm_value}
+    G4 P{duration * 1000}
+    SET_PIN PIN=buzzer VALUE=0
+```
+
+**Available Methods:**
+
+- `buzzer.beep_success()` - Double high tone for successful operations
+- `buzzer.beep_error()` - Low tone for errors
+- `buzzer.beep_click()` - Short click for menu navigation
+- `buzzer.beep_warning()` - Triple beep for warnings
+- `buzzer.tone(duration_ms, frequency_hz)` - Custom tones
+
+**Testing:** Use `TEST_BUZZER` macro to verify your setup.
 
 ---
 
